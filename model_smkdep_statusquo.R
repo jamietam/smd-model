@@ -1,18 +1,18 @@
+# detach("package:xlsx", unload=TRUE)
 rm(list = ls())
-mainDir <- "C:/Users/JT936/Dropbox/GitHub/smk-dep-model"
-# mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model"
+mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model"
 setwd(file.path(mainDir))
 library(openxlsx)
 library(reshape)
 library(splines)
 library(Bhat)
-load("depsmkprevs_2005-2017.rda") # load NSDUH data with 5 age groups
+load("depsmkprevs_2005-2018_v2.rda") # load NSDUH data with 5 age groups
 
 date = "statusquo" # name the folder where results will be saved
-namethisrun = "MPHR" 
+namethisrun = "_REVISED" 
 # Read inputs -------------------------------------------------------------
 startyear = 1900 # the burn-in period starting point
-endyear = 2060 # 2014 or 2050 , still need census projections through 2065
+endyear = 2060 
 startage = 0
 endage = 99
 Ny= endyear - startyear + 1 
@@ -50,24 +50,20 @@ getmodelprevs <- function(numerator,denominator){
 }
 
 # Main model --------------------------------------------------------------
-main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr, deltainit, deltacess, year_SF){
+main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr){
   setwd(file.path(mainDir))
   
   pop = read.xlsx("census_data/np2017_d1.xlsx",sheet=whichgender,rowNames=TRUE, colNames=TRUE, check.names=FALSE)
   
   if (mphr==1){ # Under Maximum Potential Harm reduction scenario, 100% quitting and 0% initiation starting in policy year
-    smk_init_cisnet = read.xlsx("cisnet_smkrates.xlsx",sheet=paste0(whichgender,"-SMK-Initiation"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
-    smk_cess_cisnet = read.xlsx("cisnet_smkrates.xlsx",sheet=paste0(whichgender,"-SMK-Cessation"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
+    smk_init_cisnet = read.xlsx("cisnet_smkrates_nhis2018.xlsx",sheet=paste0(whichgender,"_init"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
+    smk_cess_cisnet = read.xlsx("cisnet_smkrates_nhis2018.xlsx",sheet=paste0(whichgender,"_cess"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
     smk_cess_cisnet[119:161]=1 #2018-2060
     smk_init_cisnet[119:161]=0
-    ORhdep_quit =  1
-    Edepr_smkinit = 1
 	}
   if (mphr==0){ # Under Maximum Potential Harm reduction scenario, 100% quitting and 0% initiation starting in policy year
-    smk_init_cisnet = read.xlsx("cisnet_smkrates.xlsx",sheet=paste0(whichgender,"-SMK-Initiation"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
-    smk_cess_cisnet = read.xlsx("cisnet_smkrates.xlsx",sheet=paste0(whichgender,"-SMK-Cessation"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
-    ORhdep_quit =  c(rep(ifelse(allparams["ORhdep_quit","bhat"]==0,allparams["ORhdep_quit","estimate"],params[match("ORhdep_quit",paramsnames)]),Na-1)) 
-    Edepr_smkinit =  c(rep(ifelse(allparams["Edepr_smkinit","bhat"]==0,allparams["Edepr_smkinit","estimate"],params[match("Edepr_smkinit",paramsnames)]),Na-1))  
+    smk_init_cisnet = read.xlsx("cisnet_smkrates_nhis2018.xlsx",sheet=paste0(whichgender,"_init"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
+    smk_cess_cisnet = read.xlsx("cisnet_smkrates_nhis2018.xlsx",sheet=paste0(whichgender,"_cess"),rowNames=TRUE, colNames=TRUE, check.names=FALSE)
   }
   
   death_ns = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("ns_",whichgender),rowNames=TRUE, colNames=TRUE, check.names=FALSE) 
@@ -113,7 +109,8 @@ main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr
     dep1_inc=dep1inc
     dep1_inc[0:22,]<-y
     dep1_inc[0:12,]<-rep(0,12) # assumes no 1st MDE before age 12
-    scaleddep1_inc <- dep1_inc*inc_SF # multiply all incidence probabilities by scaling factor
+    scaleddep1_inc = dep1_inc
+    scaleddep1_inc[0:26,]<-scaleddep1_inc[0:26,]*inc_SF 
   }
     
   if (whichgender=="males"){
@@ -126,7 +123,8 @@ main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr
     dep1_inc=dep1inc
     dep1_inc[0:29,]<-y
     dep1_inc[0:12,]<-rep(0,12) # assumes no 1st MDE before age 12
-    scaleddep1_inc <- dep1_inc*inc_SF # multiply all incidence probabilities by scaling factor
+    scaleddep1_inc = dep1_inc
+    scaleddep1_inc[0:26,]<-scaleddep1_inc[0:26,]*inc_SF # multiply all incidence probabilities by scaling factor for ages <=25
   }
   
  # Age-group categorical forgetting probabilities 
@@ -151,17 +149,16 @@ main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr
   smkcess_SF[36:66] = ifelse(allparams["smkcess_SF_35to64","bhat"]==0,allparams["smkcess_SF_35to64","estimate"],params[match("smkcess_SF_35to64",paramsnames)])
   smkcess_SF[67:100] = ifelse(allparams["smkcess_SF_65plus","bhat"]==0,allparams["smkcess_SF_65plus","estimate"],params[match("smkcess_SF_65plus",paramsnames)])
   
-  smk_initpre = smk_init_cisnet*smkinit_SF # scale smoking initiation rates ### CHECK DIMENSIONS might be off by one
-  smk_cesspre = smk_cess_cisnet*smkcess_SF # scale smoking cessation rates
+  smk_init = smk_init_cisnet*smkinit_SF # scale smoking initiation rates ### CHECK DIMENSIONS might be off by one
+  smk_cess = smk_cess_cisnet*smkcess_SF # scale smoking cessation rates
   
   # smkdep effects parameters  ------------------------------------------
   RRcs_dep1 = c(rep(ifelse(allparams["RRcs_dep1","bhat"]==0,allparams["RRcs_dep1","estimate"],params[match("RRcs_dep1",paramsnames)]),Na-1)) # Note: RR estimate comes from adult survey but applies to youth in model
   RRfs_dep1 = c(rep(ifelse(allparams["RRfs_dep1","bhat"]==0,allparams["RRfs_dep1","estimate"],params[match("RRfs_dep1",paramsnames)]),Na-1))
   Efs_depr =  c(rep(ifelse(allparams["Efs_depr","bhat"]==0,allparams["Efs_depr","estimate"],params[match("Efs_depr",paramsnames)]),Na-1))  
   Ecs_depr =  c(rep(ifelse(allparams["Ecs_depr","bhat"]==0,allparams["Ecs_depr","estimate"],params[match("Ecs_depr",paramsnames)]),Na-1))  
-  
-  # ORhdep_quit =  c(rep(ifelse(allparams["ORhdep_quit","bhat"]==0,allparams["ORhdep_quit","estimate"],params[match("ORhdep_quit",paramsnames)]),Na-1)) 
-  # Edepr_smkinit =  c(rep(ifelse(allparams["Edepr_smkinit","bhat"]==0,allparams["Edepr_smkinit","estimate"],params[match("Edepr_smkinit",paramsnames)]),Na-1))  
+  ORhdep_quit =  c(rep(ifelse(allparams["ORhdep_quit","bhat"]==0,allparams["ORhdep_quit","estimate"],params[match("ORhdep_quit",paramsnames)]),Na-1))
+  Edepr_smkinit =  c(rep(ifelse(allparams["Edepr_smkinit","bhat"]==0,allparams["Edepr_smkinit","estimate"],params[match("Edepr_smkinit",paramsnames)]),Na-1))
   
   # Compartments / state variables ------------------------------------------
   
@@ -175,21 +172,16 @@ main <- function(getmodelprevs, whichgender, allparams, params,paramsnames, mphr
   
   for (y in c((startyear+1):(endyear))){
     py = paste(y - 1)
-    if (y<policystart){ # start the policy in 2018
-      smk_init = smk_initpre
-      smk_cess = smk_cesspre
+    if (y>=2016 & y<=2060){
+      usethis = scaleddep1_inc # from 2016-2020, use scaled incidence probabilities
+      if (y>=policystart & mphr==1){
+        ORhdep_quit =  1
+        Edepr_smkinit = 1
+      }
+    } else {
+      usethis = dep1_inc # all other years, use the original incidence probabilities
     }
-    if (y>=policystart) {
-      smk_init = cbind(smk_initpre[1:(policystart-1900)],deltainit*smk_initpre[(policystart-1899):201])
-      smk_cess = cbind(smk_cesspre[1:(policystart-1900)],deltacess*smk_cesspre[(policystart-1899):201])
-    }
-	  if (y<year_SF){
-       usethis = dep1_inc # if before year_SF, use the original incidence probabilities
-	  }
-    if (y>=year_SF){
-       usethis = scaleddep1_inc # starting in year_SF, use scaled incidence probabilities
-    }
-	
+    
     # No lifetime history of MDE
     ns_nevdeptrue[2:Na,paste(y)] <- ns_nevdeptrue[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-usethis[(startage+1):(endage),])*(1-death_ns[(startage+1):endage,py])
     cs_nevdeptrue[2:Na,paste(y)] <- cs_nevdeptrue[1:Na-1,py]*(1-smk_cess[(startage+1):endage,py])*(1-RRcs_dep1*usethis[(startage+1):(endage),])*(1-death_cs[(startage+1):endage,py]) + (smk_init[(startage+1):endage,py])*ns_nevdeptrue[1:Na-1,py]
@@ -378,8 +370,8 @@ getnsduhprevs <- function(depsmkprevs_by_year,assignedsex,numpop,denompop){
 getsumdiffs = function(out, whichgender){
   modelsmkdata=out[[1]]
   modeldepdata=out[[2]]
-  years<- c("X2005","X2006","X2007","X2008","X2009","X2010","X2011","X2012","X2013","X2014","X2015","X2016","X2017") # only look at output for years where NSDUH data are available
-  years2 <- c("2005","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015","2016","2017")
+  years<- c("X2005","X2006","X2007","X2008","X2009","X2010","X2011","X2012","X2013","X2014","X2015","X2016","X2017","X2018") # only look at output for years where NSDUH data are available
+  years2 <- c("2005","2006","2007","2008","2009","2010","2011","2012","2013","2014","2015","2016","2017","2018")
 
   smkdiffs <- rowSums(subset(as.data.frame(modelsmkdata[1]),select=years) - subset(getnsduhprevs(depsmkprevs_by_year,whichgender, "neversmoker","nevdeppop"),select=years2))^2 + # sum of squares
     rowSums(subset(as.data.frame(modelsmkdata[2]),select=years) - subset(getnsduhprevs(depsmkprevs_by_year,whichgender,"currentsmoker","nevdeppop"),select=years2))^2 +
@@ -410,7 +402,7 @@ getsumdiffs = function(out, whichgender){
 # xM <- list(label=paramsnamesM, est=paramsM,low=lowervectorM,upp=uppervectorM) # est = parameter starting values
 # 
 # ML_bhatF=function(paramsF){
-#   out = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, txeffcess = 1.0,util="1.0", mphr = 0)
+#   out = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF,  mphr = 0)
 #   LL = sum(getsumdiffs(out,"females"))   #Least squares
 #   # LL = sum(getsumdiffs_util(out,"females",util="1.2"))   #Least squares
 #   cat(LL,paramsF,'\n')
@@ -421,9 +413,9 @@ getsumdiffs = function(out, whichgender){
 # paramsF=resbhatF$est
 # 
 # ML_bhatM=function(paramsM){
-#   out = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, txeffcess = 1.0,util="1.1")
-#   # LL = sum(getsumdiffs(out,"males"))   #Least squares
-#   LL = sum(getsumdiffs_util(out,"males",util="1.1"))
+#   out = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM,  mphr = 0)
+#   LL = sum(getsumdiffs(out,"males"))   #Least squares
+#   # LL = sum(getsumdiffs_util(out,"males",util="1.1"))
 #   cat(LL,paramsM,'\n')
 #   return(LL)
 # }
@@ -433,21 +425,10 @@ getsumdiffs = function(out, whichgender){
 
 # Model runs --------------------------------------------------------------
 
-outF0 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 0, deltainit = 1, deltacess= 1, 2016) # runs model using parameters specified in excel sheet OR using bhat estimates
-outM0 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 0, deltainit = 1, deltacess= 1, 2016)
+# detach("package:xlsx", unload=TRUE)
 
-getsumdiffs(outF0,"females")
-getsumdiffs(outM0,"males")
-# outF1 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 0, deltainit = 1, deltacess= 1.2) # runs model using parameters specified in excel sheet OR using bhat estimates
-# outM1 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 0, deltainit = 1, deltacess= 1.2)
-# 
-# outF2 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 0, deltainit = 0.8, deltacess= 1) # runs model using parameters specified in excel sheet OR using bhat estimates
-# outM2 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 0, deltainit = 0.8, deltacess= 1)
+outF0 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 0) outM0 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 0)
 
-outF1 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 1, deltainit = 1, deltacess= 1, 2016) # runs model using parameters specified in excel sheet OR using bhat estimates
-outM1 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 1, deltainit = 1, deltacess= 1, 2016)
-
-# source('generate_smkdep_plots_tx.R',echo = TRUE)
-# source('compare_interventions.R',echo = TRUE)
+outF1 = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, mphr = 1) outM1 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, mphr = 1)
 
 

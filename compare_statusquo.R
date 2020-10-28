@@ -6,6 +6,7 @@ library(gridExtra)
 library(plyr)
 library(Hmisc)
 library(scales)
+library(xlsx)
 
 xaxisbreaks = c(2018,seq(2025,2060,5)) # specify the ticks on the x-axis of your results plots
 minyear = 2018
@@ -13,13 +14,12 @@ maxyear = 2060
 
 dir.create(file.path(mainDir, date), showWarnings = FALSE)
 setwd(file.path(mainDir, date)) # save all output to this subdirectory
-namethisfile = paste0(namethisrun,"_scenarios",date,".pdf")
 
 # Read in each model's outputs ---------------------------------------------------
-scenarios = c("Status quo", "MPHR","Zero initiation")
+scenarios = c("Status quo", "MPHR")
 
-outlistF = list(outF0,outF1, outF1.5)
-outlistM = list(outM0,outM1, outF1.5)
+outlistF = list(outF0,outF1)
+outlistM = list(outM0,outM1)
 
 ### Read in model data 
 for (i in seq(0,length(outlistF)-1)){
@@ -95,6 +95,13 @@ for (i in seq(0,length(outlistF)-1)){
   }
 }
 
+
+# Read in LHS data --------------------------------------------------------
+load("males_10perc_optrange.rda")
+load("females_10perc_optrange.rda")
+optF = 14.49653 # getsumdiffs(outF0,"females") 14.49653 = 11.229952  3.266578
+optM = 17.93285  # getsumdiffs(outM0,"males") 17.93285 = 16.670073  1.262775
+
 # Get NSDUH prevs ----------------------------------------
 getnsduhprevsCI <- function(depsmkprevs_by_year,assignedsex,numpop,denompop){
   nsduhdatalow = NULL
@@ -125,9 +132,9 @@ grid_arrange_shared_legend <- function(plots,columns,titletext) {
   )
 }
 
-theme_set( theme_light(base_size = 20))
+theme_set( theme_light(base_size = 17))
 
-# Figure 2 - Compare calibrated model with NSDUH data 2005-2017 ----------------------------
+# Figure 2 - Compare calibrated model with NSDUH data 2005-2018 ----------------------------
 calibcompare <- function(cs_deppopF0,cs_nevpoptrueF0, population1, population2, getnsduhprevs, whichgender){
   cs_deppopF0$status <- "Current MD"
   cs_nevpoptrueF0$status <- "Never MD"
@@ -176,12 +183,13 @@ calibcompare <- function(cs_deppopF0,cs_nevpoptrueF0, population1, population2, 
   
   model$variable <- as.numeric(levels(model$variable))[model$variable] # converts factor to numeric
   nsduh$variable <- as.numeric(levels(nsduh$variable))[nsduh$variable] # converts factor to numeric
+  
   g <- ggplot() +
     geom_line(data = subset(model,age=="total"&variable>=2005), aes(x=variable, y= modelvalue*100,linetype=status, colour=status ))+
     geom_pointrange(data=subset(nsduh, age=="total"), aes(x = variable, y = nsduhvalue*100, ymin=nsduh_low*100, ymax = nsduh_high*100, shape=status, colour=status))  +
     labs(title=capitalize(whichgender)) +
     scale_y_continuous(name="Prevalence (%)",limits=c(10,55),breaks=seq(10,55,5)) +
-    scale_x_continuous(name="Year",limits=c(2005,2017),breaks=seq(2005,2017,1))  +
+    scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
     theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
   return(g)
 }
@@ -206,7 +214,6 @@ scenariotable <- function(SADdepM0, SADeverdepM0, SADnevdeptrueM0,
   prop =round(c(colSums(SADdepM0)["2018"]/colSums(ALLdeathsdepM0)["2018"]*100, colSums(SADdepM0)["2060"]/colSums(ALLdeathsdepM0)["2060"]*100,
                 colSums(SADnevdeptrueM0)["2018"]/colSums(ALLdeathsnevdeptrueM0)["2018"]*100, colSums(SADnevdeptrueM0)["2060"]/colSums(ALLdeathsnevdeptrueM0)["2060"]*100,
                 colSums(totalSADM0)["2018"]/colSums(totaldeathsM0)["2018"]*100,round(colSums(totalSADM0)["2060"]/colSums(totaldeathsM0)["2060"]*100)),1)
-  
   annSAD = round(c(colSums(SADdepM0)["2018"],colSums(SADdepM0)["2060"],colSums(SADnevdeptrueM0)["2018"],colSums(SADnevdeptrueM0)["2060"],
                    colSums(totalSADM0)["2018"], colSums(totalSADM0)["2060"]))  
   
@@ -224,21 +231,27 @@ scenariotable <- function(SADdepM0, SADeverdepM0, SADnevdeptrueM0,
                  (cs_totalpopM0["2018"][6,1] - cs_totalpopM0["2060"][6,1])/cs_totalpopM0["2018"][6,1]*100)
   PR = c( cs_deppopM0["2018"][6,1]/cs_nevpoptrueM0["2018"][6,1], cs_deppopM0["2060"][6,1]/cs_nevpoptrueM0["2060"][6,1], NA, NA, NA, NA )
   
-  Table2 <- rbind(smkprev, prevchange,PR, prop,annSAD,cSAD,annYLL,cYLL )
+  Table1 <- rbind(sprintf("%.1f",smkprev), sprintf("%.1f",prop),format(annSAD,big.mark=","),format(cSAD,big.mark=","),format(annYLL,big.mark=","),format(cYLL,big.mark=","), sprintf("%.2f",PR),sprintf("%.1f",prevchange) )
   
-  colnames(Table2) = c(paste0("dep2018",g),paste0("dep2060",g), paste0("nevdeptrue2018",g), paste0("nevdeptrue2060",g), paste0("total2018",g), paste0("total2060",g))
+  colnames(Table1) = c(paste0("dep2018",g),paste0("dep2060",g), paste0("nevdeptrue2018",g), paste0("nevdeptrue2060",g), paste0("total2018",g), paste0("total2060",g))
   
-  return(Table2)
+  return(Table1)
 }
 
-baseline = cbind(scenarios[1],
-                 scenariotable(SADdepF0, SADeverdepF0, SADnevdeptrueF0, YLLdepF0, YLLeverdepF0, YLLnevdeptrueF0, ALLdeathsdepF0, ALLdeathseverdepF0, ALLdeathsnevdeptrueF0,cs_deppopF0,cs_nevpoptrueF0,cs_totalpopF0,"F"),
-                 scenariotable(SADdepM0, SADeverdepM0, SADnevdeptrueM0, YLLdepM0, YLLeverdepM0, YLLnevdeptrueM0, ALLdeathsdepM0, ALLdeathseverdepM0, ALLdeathsnevdeptrueM0,cs_deppopM0,cs_nevpoptrueM0,cs_totalpopM0,"M"))
-mphr = cbind(scenarios[2],scenariotable(SADdepF1, SADeverdepF1, SADnevdeptrueF1, YLLdepF1, YLLeverdepF1, YLLnevdeptrueF1, ALLdeathsdepF1, ALLdeathseverdepF1, ALLdeathsnevdeptrueF1,cs_deppopF1,cs_nevpoptrueF1,cs_totalpopF1,"F"),
-              scenariotable(SADdepM1, SADeverdepM1, SADnevdeptrueM1, YLLdepM1, YLLeverdepM1, YLLnevdeptrueM1, ALLdeathsdepM1, ALLdeathseverdepM1, ALLdeathsnevdeptrueM1,cs_deppopM1,cs_nevpoptrueM1,cs_totalpopM1,"M"))
+baselineF = cbind(scenarios[1],"Females", scenariotable(SADdepF0, SADeverdepF0, SADnevdeptrueF0, YLLdepF0, YLLeverdepF0, YLLnevdeptrueF0, ALLdeathsdepF0, ALLdeathseverdepF0, ALLdeathsnevdeptrueF0,cs_deppopF0,cs_nevpoptrueF0,cs_totalpopF0,"F"))
+baselineM = cbind(scenarios[1],"Males",scenariotable(SADdepM0, SADeverdepM0, SADnevdeptrueM0, YLLdepM0, YLLeverdepM0, YLLnevdeptrueM0, ALLdeathsdepM0, ALLdeathseverdepM0, ALLdeathsnevdeptrueM0,cs_deppopM0,cs_nevpoptrueM0,cs_totalpopM0,"M"))
+baseline = rbind(baselineM, baselineF)
+rownames(baseline)= c("smkprevM","propM","annSADM","cSADM", "annYLLM","cYLLM","PRM","prevchangeM","smkprevF","propF","annSADF","cSADF", "annYLLF","cYLLF","PRF","prevchangeF")
 
-write.csv(baseline, paste0("baseline_", namethisrun,".csv"))
-write.csv(mphr, paste0("mphr_", namethisrun,".csv"))
+mphrF = cbind(scenarios[2],"Females", scenariotable(SADdepF1, SADeverdepF1, SADnevdeptrueF1, YLLdepF1, YLLeverdepF1, YLLnevdeptrueF1, ALLdeathsdepF1, ALLdeathseverdepF1, ALLdeathsnevdeptrueF1,cs_deppopF1,cs_nevpoptrueF1,cs_totalpopF1,"F"))
+mphrM = cbind(scenarios[2],"Males", scenariotable(SADdepM1, SADeverdepM1, SADnevdeptrueM1, YLLdepM1, YLLeverdepM1, YLLnevdeptrueM1, ALLdeathsdepM1, ALLdeathseverdepM1, ALLdeathsnevdeptrueM1,cs_deppopM1,cs_nevpoptrueM1,cs_totalpopM1,"M"))
+mphr = rbind(mphrM, mphrF)
+rownames(mphr)= c("smkprevM","propM","annSADM","cSADM", "annYLLM","cYLLM","PRM","prevchangeM","smkprevF","propF","annSADF","cSADF", "annYLLF","cYLLF","PRF","prevchangeF")
+
+write.xlsx(baseline, file = paste0("Tables",namethisrun,"_.xlsx"),
+           sheetName = "statusquo", append = TRUE)
+write.xlsx(mphr, file = paste0("Tables",namethisrun,"_.xlsx"),
+           sheetName="mphr scenario", append=TRUE)
 
 # Figure 3. SAD YLL with MPHR --------------------------------------------------
 
@@ -254,28 +267,20 @@ annualSADmphr <- subset(annualSADmphr,year>=policystart)
 annualSADmphr$Scenario = scenarios[2]
 annualSADmphr$sum = cumsum(na.omit(annualSADmphr$value))
 
-annualSADzeroinit = melt(colSums(SADdepF2+SADdepM2))
-annualSADzeroinit$year=as.numeric(rownames(annualSADzeroinit))
-annualSADzeroinit <- subset(annualSADzeroinit,year>=policystart)
-annualSADzeroinit$Scenario = scenarios[3]
-annualSADzeroinit$sum = cumsum(na.omit(annualSADzeroinit$value))
-
-
-
-annualSAD = rbind(annualSADM0,annualSADmphr, annualSADzeroinit)
+annualSAD = rbind(annualSADM0,annualSADmphr)
 annualSAD$Scenario <- factor(annualSAD$Scenario)
 options(scipen=10000)
 
-ribbondataSAD = as.data.frame(cbind(annualSADM0[,2],annualSADM0[,4] ,annualSADmphr[,4],annualSADzeroinit[,4]))
+ribbondataSAD = as.data.frame(cbind(annualSADM0[,2],annualSADM0[,4] ,annualSADmphr[,4]))
 
 fracSAD <- ggplot(annualSAD)+
-  geom_line(aes(x=year,y=sum/1000,group=Scenario, colour=Scenario))+
-  scale_y_continuous(name="Cumulative (thousands)",label=comma, limits=c(0,max(annualSAD$sum+5000)/1000), breaks=seq(0,max(annualSAD$sum+5000)/1000,100))+
+  geom_line(aes(x=year,y=sum/1000,group=Scenario, colour=Scenario, linetype=Scenario))+
+  scale_y_continuous(name="Cumulative (thousands)",label=comma, limits=c(0,500), breaks=seq(0,500,50))+
   scale_x_continuous(name="Year",limits=c(minyear,maxyear),breaks=xaxisbreaks)  +
   theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) +
   labs(title="Smoking attributable deaths") +
   geom_ribbon(data=ribbondataSAD, aes(x = V1,ymin=V3/1000,ymax=V2/1000), fill="yellow", alpha="0.2")+
-  annotate(geom="text", x=2045, y=350, label="Avoidable SADs")
+  annotate(geom="text", x=2045, y=250, label="Avoidable SADs")
 
 annualYLLM0 = melt(colSums(YLLdepF0+YLLdepM0))
 annualYLLM0$year=as.numeric(rownames(annualYLLM0))
@@ -289,34 +294,89 @@ annualYLLmphr <- subset(annualYLLmphr,year>=policystart)
 annualYLLmphr$Scenario = scenarios[2]
 annualYLLmphr$sum = cumsum(na.omit(annualYLLmphr$value))
 
-annualYLLzeroinit = melt(colSums(YLLdepF2+YLLdepM2))
-annualYLLzeroinit$year=as.numeric(rownames(annualYLLzeroinit))
-annualYLLzeroinit <- subset(annualYLLzeroinit,year>=policystart)
-annualYLLzeroinit$Scenario = scenarios[3]
-annualYLLzeroinit$sum = cumsum(na.omit(annualYLLzeroinit$value))
-
-annualYLL = rbind(annualYLLM0,annualYLLmphr, annualYLLzeroinit)
+annualYLL = rbind(annualYLLM0,annualYLLmphr)
 annualYLL$Scenario <- factor(annualYLL$Scenario)
 options(scipen=10000)
 
-ribbondataYLL = as.data.frame(cbind(annualYLLM0[,2],annualYLLM0[,4] ,annualYLLmphr[,4],annualYLLzeroinit[,4]))
+ribbondataYLL = as.data.frame(cbind(annualYLLM0[,2],annualYLLM0[,4] ,annualYLLmphr[,4]))
 
 fracYLL <- ggplot(annualYLL)+
-  geom_line(aes(x=year,y=sum/1000000,group=Scenario, colour=Scenario))+
-  scale_y_continuous(name="Cumulative (millions)",labels =unit_format(unit = "M"), limits=c(0,20), breaks=seq(0,20,2))+
+  geom_line(aes(x=year,y=sum/1000000,group=Scenario, colour=Scenario, linetype=Scenario))+
+  scale_y_continuous(name="Cumulative (millions)",labels =unit_format(unit = "M"), limits=c(0,12), breaks=seq(0,12,1))+
   scale_x_continuous(name="Year",limits=c(minyear,maxyear),breaks=xaxisbreaks)  +
   labs(title="Years of life lost") +
   geom_ribbon(data=ribbondataYLL, aes(x = V1,ymin=V3/1000000,ymax=V2/1000000), fill="yellow", alpha="0.2")+
-  annotate(geom="text", x=2045, y=6, label="Avoidable YLL")+
+  annotate(geom="text", x=2045, y=4, label="Avoidable YLL")+
   theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
-
-
   
 jpeg(filename = paste0("Fig3_SADYLLavoidable_", namethisrun,".jpg"),width=10, height=6, units ="in", res=1000)
 grid_arrange_shared_legend(list(fracSAD, fracYLL),2,"")
 dev.off()
 
 # Figure 4. Prevalence ratio over time ----------------------------------------------
+
+PRfemales <-as.data.frame(cs_deppopF0/cs_nevpoptrueF0)
+PRfemales$age <- rownames(PRfemales)
+PRfemales <- melt(PRfemales, id.vars=c("age"))
+colnames(PRfemales)[2] <- "survey_year"
+colnames(PRfemales)[3] <- "PR"
+PRfemales$survey_year <- as.numeric(as.character(PRfemales$survey_year))
+PRfemales$sex = "Females"
+
+PRmales <-as.data.frame(cs_deppopM0/cs_nevpoptrueM0)
+PRmales$age<-rownames(PRmales)
+PRmales <- melt(PRmales, id.vars=c("age"))
+colnames(PRmales)[2] <- "survey_year"
+colnames(PRmales)[3] <- "PR"
+PRmales$survey_year <- as.numeric(as.character(PRmales$survey_year))
+PRmales$sex = "Males"
+
+PRdata <- rbind(PRmales, PRfemales)
+PRdata <- subset(PRdata,age=="total" & survey_year>=2018)
+
+PRfemalesLHS <- subset(femalesLHS,V1<=1.1*optF)[41:84]
+PRmalesLHS <- subset(malesLHS,V1<=1.1*optM)[41:84]
+
+topten = data.frame()
+for (x in 1:43){
+  topten[1,x] = min(PRmalesLHS[,x])
+  topten[2,x] = max(PRmalesLHS[,x])
+  topten[3,x] = min(PRfemalesLHS[,x])
+  topten[4,x] = max(PRfemalesLHS[,x])
+  # topten[1,x] = quantile(keepersM[,x],probs=c(.025,.975))[1]
+  # topten[2,x] = quantile(keepersM[,x],probs=c(.025,.975))[2]
+  # topten[3,x] = quantile(keepersF[,x],probs=c(.025,.975))[1]
+  # topten[4,x] = quantile(keepersF[,x],probs=c(.025,.975))[2]
+} 
+topten$sex = c("Males", "Males","Females","Females")
+colnames(topten) <- c(paste(2018:2060),"sex")
+lower <- topten[c(1,3),]
+lower <- melt(lower, by=c("sex"))
+colnames(lower) <- c("sex","survey_year","lower")
+upper <- topten[c(2,4),]
+upper <- melt(upper, by=c("sex"))
+colnames(upper) <- c("sex","survey_year","upper")
+
+ribbondata <- merge(lower, upper, by=c("sex","survey_year"))
+ribbondata$survey_year <- as.numeric(as.character(ribbondata$survey_year))
+
+PRdata= merge(PRdata, ribbondata, by=c("survey_year","sex"))
+
+xaxisbreaks = c(2018,seq(2025,2060,5)) # specify the ticks on the x-axis of your results plots
+minyear = 2018
+maxyear = 2060
+t <- ggplot(PRdata) + 
+  geom_line(aes(x=survey_year, y= PR, colour=sex, linetype=sex))+
+  scale_y_continuous(name="Prevalence ratio",limits=c(1.0,3.4),breaks=c(seq(1.0,3.4,0.2))) +
+  scale_x_continuous(name="Year",limits=c(minyear,maxyear),breaks=xaxisbreaks)  +
+  theme(axis.text.x=element_text(angle=45, hjust=1),legend.title = element_blank())+
+  geom_ribbon(aes(x=survey_year, ymin = lower, ymax=upper, fill=sex), alpha=0.1)
+
+jpeg(filename = paste0("Fig4_PrevRatio_", namethisrun,".jpg"),width=8, height=6, units ="in", res=1000)
+t
+dev.off()
+
+
 PRfemales <-cs_deppopF0/cs_nevpoptrueF0
 PRfemales$age<-rownames(PRfemales)
 PRfemales <- melt(PRfemales, id.vars=c("age"))
@@ -335,20 +395,165 @@ PRmales$sex = "Males"
 
 PRdata <- rbind(PRmales, PRfemales)
 PRdata <- subset(PRdata,age=="total" & survey_year>=2018)
-t <- ggplot(PRdata) + 
+t1620 <- ggplot(PRdata) + 
     geom_line(aes(x=survey_year, y= PR, colour=sex, linetype=sex))+
-    scale_y_continuous(name="Prevalence ratio",limits=c(1.0,2.6),breaks=c(seq(1.0,2.6,0.2))) +
+    scale_y_continuous(name="Prevalence ratio",limits=c(1.0,2.8),breaks=c(seq(1.0,2.8,0.2))) +
     scale_x_continuous(name="Year",limits=c(minyear,maxyear),breaks=xaxisbreaks)  +
-    theme(axis.text.x=element_text(angle=45, hjust=1),legend.title = element_blank())
+    theme(axis.text.x=element_text(angle=45, hjust=1),legend.title = element_blank())+
+    labs(title="MD increase 2016-2020") 
+  
+t1660 <- t1660+
+  labs(title="MD increase 2016-2060") 
 
 jpeg(filename = paste0("Fig4_PrevRatio_", namethisrun,".jpg"),width=6, height=6, units ="in", res=1000)
 t
 dev.off()
 
+jpeg(filename = paste0("compare_MD_inc_years.jpg"),width=10, height=6, units ="in", res=1000)
+grid_arrange_shared_legend(list(t1620, t1660),2,"Smoking prevalence ratio: MD trend 2016-2020 vs 2016-2060")
+dev.off()
 
 trythis <- subset(femalesLHS)
 
 # Figures for supplement ----------------------------------------------------------------
+# Table S5 LHS ranges --------------------------------------------------------------
+LHStableF <- subset(femalesLHS,V1<=1.1*optF)
+LHStableM <- subset(malesLHS,V1<=1.1*optM)
+
+makecol<-function(cs_deppopM0, SADdepM0,ALLdeathsdepM0,YLLdepM0,LHStableM, a,b,c,d,e,f){
+  col1 = rbind(
+    paste0( sprintf("%.1f",cs_deppopM0["2018"][6,1]*100), " (",sprintf("%.1f",min(LHStableM[,a])*100)," - ",sprintf("%.1f",max(LHStableM[,a]*100,1)),")"),
+    paste0( sprintf("%.1f",colSums(SADdepM0)["2018"]/colSums(ALLdeathsdepM0)["2018"]*100), " (",sprintf("%.1f",min(LHStableM[,b])*100)," - ",sprintf("%.1f",max(LHStableM[,b]*100,1)),")"),      
+    paste0( format(round(colSums(SADdepM0)["2018"]),big.mark=","), " (",format(round(min(LHStableM[,c])),big.mark=",")," - ",format(round(max(LHStableM[,c])),big.mark=","),")"),
+    NA,
+    paste0( format(round(colSums(YLLdepM0)["2018"]),big.mark=","), " (",format(round(min(LHStableM[,e])),big.mark=",")," - ",format(round(max(LHStableM[,e])),big.mark=","),")"),
+    NA
+  )
+  col2 = rbind(
+    paste0( sprintf("%.1f",cs_deppopM0["2060"][6,1]*100), " (",sprintf("%.1f",min(LHStableM[,a+1])*100)," - ",sprintf("%.1f",max(LHStableM[,a+1]*100,1)),")"),
+    paste0( sprintf("%.1f",colSums(SADdepM0)["2060"]/colSums(ALLdeathsdepM0)["2060"]*100), " (",sprintf("%.1f",min(LHStableM[,b+1])*100)," - ",sprintf("%.1f",max(LHStableM[,b]*100,1)),")"),      
+    paste0( format(round(colSums(SADdepM0)["2060"]),big.mark=","), " (",format(round(min(LHStableM[,c+1])),big.mark=",")," - ",format(round(max(LHStableM[,c+1])),big.mark=","),")"),
+    paste0( format(sum(colSums(SADdepM0)[119:161]),big.mark=","), " (",format(round(min(LHStableM[,d])),big.mark=",")," - ",format(round(max(LHStableM[,d])),big.mark=","),")"),
+    paste0( format(round(colSums(YLLdepM0)["2060"]),big.mark=","), " (",format(round(min(LHStableM[,e+1])),big.mark=",")," - ",format(round(max(LHStableM[,e+1])),big.mark=","),")"),
+    paste0( format(sum(colSums(YLLdepM0)[119:161]),big.mark=","), " (",format(round(min(LHStableM[,f])),big.mark=",")," - ",format(round(max(LHStableM[,f])),big.mark=","),")")
+  )
+  
+  return(cbind(col1,col2))
+}
+
+TS5 <-rbind(
+  cbind(makecol(cs_deppopM0, SADdepM0, ALLdeathsdepM0, YLLdepM0, LHStableM, 11,17,23,29,32,38),
+        makecol(cs_nevpoptrueM0, SADnevdeptrueM0, ALLdeathsnevdeptrueM0, YLLnevdeptrueM0, LHStableM, 13,19,25,30,34,39)),
+  cbind(makecol(cs_deppopF0, SADdepF0, ALLdeathsdepF0, YLLdepF0, LHStableF, 11,17,23,29,32,38),
+        makecol(cs_nevpoptrueF0, SADnevdeptrueF0, ALLdeathsnevdeptrueF0, YLLnevdeptrueF0, LHStableF, 13,19,25,30,34,39)))
+
+colnames(TS5) = c("dep2018","dep2060","nevdeptrue2018","nevdeptrue2060")
+rownames(TS5) = c("smkprevM", "propM","annSADM","cSADM","annYLLM","cYLLM","smkprevF", "propF","annSADF","cSADF","annYLLF","cYLLF")
+write.xlsx(TS5, file = paste0("Tables",namethisrun,"_.xlsx"),
+           sheetName="TableS5", append=TRUE)
+
+
+
+# Figure S5
+depgrp18 <- getnsduhprevs(depsmkprevs_by_year,"females","dep","totalpop")
+depgrp18low <- getnsduhprevsCI(depsmkprevs_by_year,"females","dep","totalpop")[[1]]
+depgrp18high <- getnsduhprevsCI(depsmkprevs_by_year,"females","dep","totalpop")[[2]]
+depgrp18$sex <- "females"
+depgrp18low$sex <- "females"
+depgrp18high$sex <- "females"
+depgrp18$age<-rownames(depgrp18)
+depgrp18low$age<-rownames(depgrp18low)
+depgrp18high$age<-rownames(depgrp18high)
+  
+depgrp18<-melt(as.data.frame(depgrp18),id.vars=c("age","sex")) ## Add CIs to this dataframe
+depgrp18low<-melt(as.data.frame(depgrp18low),id.vars=c("age","sex")) ## Add CIs to this dataframe
+depgrp18high<-melt(as.data.frame(depgrp18high),id.vars=c("age","sex")) ## Add CIs to this dataframe
+  
+colnames(depgrp18)[4] <- "nsduhvalue"
+colnames(depgrp18low)[4] <- "nsduhvalue_low"
+colnames(depgrp18high)[4] <- "nsduhvalue_high"
+
+depgrp99 <- getnsduhprevs(depsmkprevs_by_year,"males","dep","totalpop")
+depgrp99low <- getnsduhprevsCI(depsmkprevs_by_year,"males","dep","totalpop")[[1]]
+depgrp99high <- getnsduhprevsCI(depsmkprevs_by_year,"males","dep","totalpop")[[2]]
+depgrp99$sex <- "males"
+depgrp99low$sex <- "males"
+depgrp99high$sex <- "males"
+depgrp99$age<-rownames(depgrp99)
+depgrp99low$age<-rownames(depgrp99low)
+depgrp99high$age<-rownames(depgrp99high)
+
+depgrp99<-melt(as.data.frame(depgrp99),id.vars=c("age","sex")) ## Add CIs to this dataframe
+depgrp99low<-melt(as.data.frame(depgrp99low),id.vars=c("age","sex")) ## Add CIs to this dataframe
+depgrp99high<-melt(as.data.frame(depgrp99high),id.vars=c("age","sex")) ## Add CIs to this dataframe
+
+colnames(depgrp99)[4] <- "nsduhvalue"
+colnames(depgrp99low)[4] <- "nsduhvalue_low"
+colnames(depgrp99high)[4] <- "nsduhvalue_high"
+
+depgrp18 <-merge(depgrp18, depgrp18low, by=c("age","sex", "variable"))
+depgrp18 <-merge(depgrp18, depgrp18high, by=c("age","sex", "variable"))
+
+depgrp99 <-merge(depgrp99, depgrp99low, by=c("age","sex", "variable"))
+depgrp99 <-merge(depgrp99, depgrp99high, by=c("age","sex", "variable"))
+
+depgrp <- rbind(depgrp18, depgrp99)
+
+depgrp$variable <- as.numeric(levels(depgrp$variable))[depgrp$variable] # converts factor to numeric
+
+dep_totalpopF0$age <- rownames(dep_totalpopF0)
+dep_totalpopF0$sex <- "females"
+dep_totalpopF0 <-melt(as.data.frame(dep_totalpopF0),id.vars=c("sex","age"))
+dep_totalpopM0$age <- rownames(dep_totalpopM0)
+dep_totalpopM0$sex <- "males"
+dep_totalpopM0 <-melt(as.data.frame(dep_totalpopM0),id.vars=c("sex","age"))
+
+model <- rbind(dep_totalpopM0,dep_totalpopF0)
+colnames(model)[4] <- "modelvalue"
+depgrp <- merge(depgrp, model, by=c("age","sex","variable"))
+
+gF <- ggplot() +
+  geom_line(data = subset(depgrp,sex=="females"), aes(x=variable, y= modelvalue*100, colour=age ))+
+  # geom_pointrange(data=subset(depgrp,age=="18to25"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100,colour=sex))  +
+  geom_pointrange(data=subset(depgrp,sex=="females"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100,colour=age))  +
+  labs(title="Females") +
+  scale_y_continuous(name="Prevalence (%)",limits=c(0,20),breaks=seq(0,20,2)) +
+  scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
+  theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
+
+gM <- ggplot() +
+  geom_line(data = subset(depgrp,sex=="males"), aes(x=variable, y= modelvalue*100, colour=age ))+
+  # geom_pointrange(data=subset(depgrp,age=="18to25"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100,colour=sex))  +
+  geom_pointrange(data=subset(depgrp,sex=="males"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100,colour=age))  +
+  labs(title="Males") +
+  scale_y_continuous(name="Prevalence (%)",limits=c(0,20),breaks=seq(0,20,2)) +
+  scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
+  theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
+
+
+jpeg(filename = paste0("nsduh2005-2018_depbyage_sex.jpg"),width=10, height=6, units ="in", res=1000)
+grid_arrange_shared_legend(list(gF, gM),2,"Current MD by age: model vs. NSDUH")
+dev.off()
+
+
+g18 <- ggplot() +
+    geom_line(data = subset(depgrp,age=="18to25"), aes(x=variable, y= modelvalue*100,linetype=sex, colour=sex ))+
+    geom_pointrange(data=subset(depgrp,age=="18to25"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100,colour=sex))  +
+    labs(title="Ages 18-25") +
+    scale_y_continuous(name="Prevalence (%)",limits=c(0,24),breaks=seq(0,24,2)) +
+    scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
+    theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
+g99 <- ggplot() +
+  geom_line(data = subset(depgrp,age=="total"), aes(x=variable, y= modelvalue*100,linetype=sex, colour=sex ))+
+  geom_pointrange(data=subset(depgrp, age=="total"), aes(x = variable, y = nsduhvalue*100, ymin=nsduhvalue_low*100, ymax = nsduhvalue_high*100, colour=sex))  +
+  labs(title="Ages 18-99") +
+  scale_y_continuous(name="Prevalence (%)",limits=c(0,24),breaks=seq(0,24,2)) +
+  scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
+  theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(), plot.title = element_text(hjust = 0.5))
+
+jpeg(filename = paste0("nsduh2005-2018_depbyage.jpg"),width=10, height=6, units ="in", res=1000)
+grid_arrange_shared_legend(list(g18, g99),2,"")
+dev.off()
 
 # Prevalence projections ----------------------------
 cs_deppopF0$status="Current MD"
@@ -383,59 +588,59 @@ jpeg(filename = paste0("Fig3_prevproj_", namethisrun,".jpg"),width=6, height=6, 
 t
 dev.off()
 
-# Compare model with NSDUH data 2005-2017 ----------------------------
-comparison <- function(m1,m2,m3,prev1, prev2, prev3, population,agegroup,getnsduhprevs, whichgender){
-  m1$status <- "Never smoker"
-  m2$status <- "Current smoker"
-  m3$status <- "Former smoker"
-  m1$age<-rownames(m1)
-  m2$age<-rownames(m2)
-  m3$age<-rownames(m3)
-  model <- rbind(m1,m2)
-  model <- rbind(model,m3)
+# Compare model with NSDUH data 2005-2018 ----------------------------
+comparison <- function(ns_deppopF0,cs_deppopF0,fs_deppopF0,prev1, prev2, prev3, population,agegroup, whichgender){
+  ns_deppopF0$status <- "Never smoker"
+  cs_deppopF0$status <- "Current smoker"
+  fs_deppopF0$status <- "Former smoker"
+  ns_deppopF0$age<-rownames(ns_deppopF0)
+  cs_deppopF0$age<-rownames(cs_deppopF0)
+  fs_deppopF0$age<-rownames(fs_deppopF0)
+  model <- rbind(ns_deppopF0,cs_deppopF0)
+  model <- rbind(model,fs_deppopF0)
   model$Model <- paste0(model$status)
   model <-melt(as.data.frame(model),id.vars=c("Model","age","status"))
   colnames(model)[5] <- "modelvalue"
-  m1nsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev1,population)
-  m1nsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev1,population)[[1]]
-  m1nsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev1,population)[[2]]
-  m1nsduh$status <- "Never smoker"
-  m1nsduhlow$status <- "Never smoker"
-  m1nsduhhigh$status <- "Never smoker"
-  m1nsduh$age<-rownames(m1nsduh)
-  m1nsduhlow$age<-rownames(m1nsduhlow)
-  m1nsduhhigh$age<-rownames(m1nsduhhigh)
+  nnsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev1,population)
+  nnsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev1,population)[[1]]
+  nnsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev1,population)[[2]]
+  nnsduh$status <- "Never smoker"
+  nnsduhlow$status <- "Never smoker"
+  nnsduhhigh$status <- "Never smoker"
+  nnsduh$age<-rownames(nnsduh)
+  nnsduhlow$age<-rownames(nnsduhlow)
+  nnsduhhigh$age<-rownames(nnsduhhigh)
   
-  m2nsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev2,population)
-  m2nsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev2,population)[[1]]
-  m2nsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev2,population)[[2]]
-  m2nsduh$status <- "Current smoker"
-  m2nsduhlow$status <- "Current smoker"
-  m2nsduhhigh$status <- "Current smoker"
-  m2nsduh$age<-rownames(m2nsduh)
-  m2nsduhlow$age<-rownames(m2nsduhlow)
-  m2nsduhhigh$age<-rownames(m2nsduhhigh)
+  cnsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev2,population)
+  cnsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev2,population)[[1]]
+  cnsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev2,population)[[2]]
+  cnsduh$status <- "Current smoker"
+  cnsduhlow$status <- "Current smoker"
+  cnsduhhigh$status <- "Current smoker"
+  cnsduh$age<-rownames(cnsduh)
+  cnsduhlow$age<-rownames(cnsduhlow)
+  cnsduhhigh$age<-rownames(cnsduhhigh)
   
-  m3nsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev3,population)
-  m3nsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev3,population)[[1]]
-  m3nsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev3,population)[[2]]
-  m3nsduh$status <- "Former smoker"
-  m3nsduhlow$status <- "Former smoker"
-  m3nsduhhigh$status <- "Former smoker"
-  m3nsduh$age<-rownames(m3nsduh)
-  m3nsduhlow$age<-rownames(m3nsduhlow)
-  m3nsduhhigh$age<-rownames(m3nsduhhigh)
+  fnsduh <- getnsduhprevs(depsmkprevs_by_year,whichgender,prev3,population)
+  fnsduhlow <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev3,population)[[1]]
+  fnsduhhigh <- getnsduhprevsCI(depsmkprevs_by_year,whichgender,prev3,population)[[2]]
+  fnsduh$status <- "Former smoker"
+  fnsduhlow$status <- "Former smoker"
+  fnsduhhigh$status <- "Former smoker"
+  fnsduh$age<-rownames(fnsduh)
+  fnsduhlow$age<-rownames(fnsduhlow)
+  fnsduhhigh$age<-rownames(fnsduhhigh)
   
-  nsduh <- rbind(m1nsduh,m2nsduh)
-  nsduh <- rbind(nsduh,m3nsduh)
+  nsduh <- rbind(nnsduh,cnsduh)
+  nsduh <- rbind(nsduh,fnsduh)
   nsduh$NSDUH <- paste0(nsduh$status)
   
-  nsduhlow <- rbind(m1nsduhlow,m2nsduhlow)
-  nsduhlow <- rbind(nsduhlow,m3nsduhlow)
+  nsduhlow <- rbind(nnsduhlow,cnsduhlow)
+  nsduhlow <- rbind(nsduhlow,fnsduhlow)
   nsduhlow$NSDUH <- paste0(nsduhlow$status, "_nsduhlow")
   
-  nsduhhigh <- rbind(m1nsduhhigh,m2nsduhhigh)
-  nsduhhigh <- rbind(nsduhhigh,m3nsduhhigh)
+  nsduhhigh <- rbind(nnsduhhigh,cnsduhhigh)
+  nsduhhigh <- rbind(nsduhhigh,fnsduhhigh)
   nsduhhigh$NSDUH <- paste0(nsduhhigh$status, "_nsduhhigh")
   
   nsduh<-melt(as.data.frame(nsduh),id.vars=c("NSDUH","age","status")) ## Add CIs to this dataframe
@@ -451,25 +656,32 @@ comparison <- function(m1,m2,m3,prev1, prev2, prev3, population,agegroup,getnsdu
   
   model$variable <- as.numeric(levels(model$variable))[model$variable] # converts factor to numeric
   nsduh$variable <- as.numeric(levels(nsduh$variable))[nsduh$variable] # converts factor to numeric
+  # model$modelvalue <- as.numeric(levels(model$modelvalue))[model$modelvalue] # converts factor to numeric
   
-  model$status =  
-    
     g <- ggplot() +
     geom_line(data = subset(model,age==agegroup&variable>=2005), aes(x=variable, y= modelvalue*100,linetype=Model ))+
     geom_pointrange(data=subset(nsduh, age==agegroup), aes(x = variable, y = nsduhvalue*100, ymin=nsduh_low*100, ymax = nsduh_high*100, shape=NSDUH, colour=NSDUH))  +
     labs(title=capitalize(whichgender)) +
     scale_y_continuous(name="Prevalence (%)",limits=c(0,70),breaks=seq(0,70,5)) +
-    scale_x_continuous(name="Year",limits=c(2005,2017),breaks=seq(2005,2017,1))  +
+    scale_x_continuous(name="Year",limits=c(2005,2018),breaks=seq(2005,2018,1))  +
     theme(axis.text.x=element_text(angle=60, hjust=1))
   return(g)
 }
 
-vF <- comparison(ns_deppopF0,cs_deppopF0,fs_deppopF0,"neversmoker", "currentsmoker", "formersmoker", "deppop","total",getnsduhprevs, "females")
-vM <- comparison(ns_deppopM0,cs_deppopM0,fs_deppopM0,"neversmoker", "currentsmoker", "formersmoker", "deppop","total",getnsduhprevs, "males")
+vF <- comparison(ns_deppopF0,cs_deppopF0,fs_deppopF0,"neversmoker", "currentsmoker", "formersmoker", "deppop","total", "females")
+vM <- comparison(ns_deppopM0,cs_deppopM0,fs_deppopM0,"neversmoker", "currentsmoker", "formersmoker", "deppop","total", "males")
 
-jpeg(filename = paste0("Fig2_calibrated_", namethisrun,".jpg"),width=10, height=6, units ="in", res=1000)
+jpeg(filename = paste0("Fig2_smkstat_calibrated_deppop2018_", namethisrun,".jpg"),width=10, height=6, units ="in", res=1000)
 grid_arrange_shared_legend(list(vF, vM),2,"")
 dev.off()
+
+nvF <- comparison(ns_nevpoptrueF0,cs_nevpoptrueF0,fs_nevpoptrueF0,"neversmoker", "currentsmoker", "formersmoker", "nevdeppop","total", "females")
+nvM <- comparison(ns_nevpoptrueM0,cs_nevpoptrueM0,fs_nevpoptrueM0,"neversmoker", "currentsmoker", "formersmoker", "nevdeppop","total", "males")
+
+jpeg(filename = paste0("Fig2_smkstat_calibrated_nevdeppop2018_", namethisrun,".jpg"),width=10, height=6, units ="in", res=1000)
+grid_arrange_shared_legend(list(nvF, nvM),2,"")
+dev.off()
+
 
 # grid_arrange_shared_legend(list(tF, tM),2,"Smoking prevalence among adults with current depression")
 # grid_arrange_shared_legend(list(pFCI, pMCI),2,"Smokers with current depression")
