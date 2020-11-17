@@ -5,3 +5,15 @@
 <a href="https://authors.elsevier.com/c/1c4yBKt2py2P0">https://authors.elsevier.com/c/1c4yBKt2py2P0</a>
 
 This repository contains code to run a simulation model of major depressive episodes and smoking behaviors. The model is run in R and calibrated to data from the National Survey on Drug Use and Health (NSDUH) 2005-2018. 
+
+**Smoking sub-model**
+
+**MD submodel**
+
+**MD and smoking comorbidity model**
+
+**Smoking prevalence and smoking-attributable mortality**
+
+**Generate figures**
+
+**Sensitivity analysis**
