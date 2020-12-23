@@ -2,12 +2,20 @@ rm(list = ls())  # remove any variables in R's memory
 library(openxlsx)
 library(plyr)
 library(matrixStats)
-# mainDir <- "C:/Users/JT936/Dropbox/GitHub/smk-dep-model"
-mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model"
+library(doParallel)
+library(foreach)
+cl <- makeCluster(10)
+registerDoParallel(cl)
+# mainDir <- "C:/Users/JT936/Dropbox/GitHub/mds-model"
+# mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model"
+mainDir <- "/home/jt936/mds-model"
 setwd(file.path(mainDir))
 
-##################################### Model input #########################################
-n.i   <- 5                      # number of simulated individuals
+###########################################################################
+# Inputs ------------------------------------------------------------------
+###########################################################################
+cohorts <- 1900:2100
+n.i   <- 50                      # number of simulated individuals
 n.t   <- 100                    # time horizon, number of years or cycles
 # model states: Neversmoker (N), Currentsmoker (C), Formersmoker (F), "Happy" (H), Depressed (D), "Recovered" (R), "Underreport" (U), Dead (X)
 v.n   <- c( "NH","CH","FH","ND","CD","FD","NR","CR","FR","NU","CU","FU","X")
@@ -51,7 +59,9 @@ rr.DX = c(rep(1,100)) # ESTIMATE DURING CALIBRATION #c(rep(1,17),rep(5.68,100-18
 rr.RX = c(rep(1,100)) # ESTIMATE DURING CALIBRATION
 rr.UX = c(rep(1,100)) # ESTIMATE DURING CALIBRATION - leading to negative probabilities for specific birth cohorts/ages
 
-##################################### Functions ###########################################
+###########################################################################
+# Microsimulation model ---------------------------------------------------
+###########################################################################
 
 # The MicroSim function keeps track of what happens to each individual during each cycle. 
 # Arguments:  
@@ -71,7 +81,7 @@ MicroSim <- function(bc,whichgender, v.M_1, n.i, n.t, v.n, TR.out = TRUE, TS.out
   # create the matrix capturing the state name/costs/health outcomes for all individuals at each time point 
   m.M <- matrix(nrow = n.i, ncol = n.t + 1, 
                 dimnames = list(paste(1:n.i, bc, whichgender, sep = " "), # each individual, year of birth, gender
-                                paste(bc:(bc+n.t), sep = " ")))  
+                                paste(0:n.t, sep = " ")))  # column names = age
   m.M[, 1] <- v.M_1                                         # indicate the initial health state   
   
   for (i in 1:n.i) {
@@ -110,9 +120,10 @@ MicroSim <- function(bc,whichgender, v.M_1, n.i, n.t, v.n, TR.out = TRUE, TS.out
   return(results)  # return the results
 }  # end of the MicroSim function  
 
-
-#### Probability function
-# The Probs function that updates the transition probabilities of every cycle is shown below.
+###########################################################################
+# Probability function ----------------------------------------------------
+###########################################################################
+# The Probs function updates transition probabilities at each time step
 
 Probs <- function(bc, t, M_it) { 
   # bc:   birth cohort
@@ -225,54 +236,6 @@ Probs <- function(bc, t, M_it) {
   return(v.p.it) 
 }       
 
-# MicroSim(1960, "F", v.M_1, n.i, n.t, v.n)$m.M 
-
-
-##################################### Run the simulation ##################################
-# by single cohort
-# sim_1980  <- MicroSim(1980, "F", v.M_1, n.i, n.t, v.n) # run for no treatment
-
-library(doParallel)
-cl <- makeCluster(2)
-registerDoParallel(cl)
-library(foreach)
-
-cohorts = 1900:1901
-system.time(
-    simcohorts<-foreach (i=cohorts, .combine='rbind') %dopar% 
-      {
-        MicroSim(i, "F", v.M_1, n.i, n.t, v.n)$m.M
-      }
-)
-
-# Transform from Cohort-Age to Cohort-Period
-transform <- function(simcohorts){
-  new <- matrix(nrow = n.i*length(cohorts), ncol = 201))
-  colnames(new) <- c(1900:2100)
-  
-  new[1,] <- c(simcohorts[1,],rep(NA,2100-bc-100))
-  new[6,] <- c(rep(NA,bc-1900), simcohorts[6,])
-    cbind(rep(cohorts,each=n.i),simcohorts)
-    rep(NA,bc-1900),
-  for (r in 1:nrow(simcohorts)){
-    new[1,"1900"]
-    c(rep(NA,bc-1900),simcohorts[1,])
-  }
-}
-
-# for multiple cohorts
-cohorts = c(1900:1901)
-populationF = MicroSim(1900, "F", v.M_1, n.i, n.t, v.n)$m.M 
-for (b in cohorts){
-  sim_cohort  <- MicroSim(b, "F", v.M_1, n.i, n.t, v.n) # run for no treatment
-  populationF = rbind.fill.matrix( populationF,sim_cohort$m.M)
-}
-
-counts = rbind(colCounts(populationF,value="NH",na.rm=TRUE),colCounts(populationF,value="C",na.rm=TRUE),
-               colCounts(populationF,value="F",na.rm=TRUE),colSums(!is.na(populationF),na.rm=TRUE))
-
-
-
 ###########################################################################
 # Probability Checks ------------------------------------------------------
 ###########################################################################
@@ -378,24 +341,40 @@ for (bc in cohorts){
   }
 }
 
-############################################################################################
-################# Microsimulation modeling using R: a tutorial #### 2018 ###################
-############################################################################################
-# This code forms the basis for the microsimulation model of the article: 
+###########################################################################
+# Run the simulation ------------------------------------------------------
+###########################################################################
+
+# For a single cohort
+# sim_1980  <- MicroSim(1980, "F", v.M_1, n.i, n.t, v.n) # run for no treatment
+
+# For multiple cohorts in parallel (for sequental, change to %do%)
+system.time(
+    simcohorts.age<-foreach (i=cohorts, .combine='rbind') %dopar% 
+      {
+        MicroSim(i, "F", v.M_1, n.i, n.t, v.n)$m.M
+      }
+)
+
+# Transform from Cohort-Age to Cohort-Period
+simcohorts.year <- matrix(nrow = n.i*length(cohorts), ncol = 201)
+colnames(simcohorts.year) <- c(1900:2100)
+for (c in 1:length(cohorts)){
+  simcohorts.year[(1+n.i*(c-1)):(c*n.i),] <- cbind(matrix(NA,ncol=(cohorts[c]-1900),nrow=n.i), 
+                                             simcohorts.age[(1+n.i*(c-1)):(c*n.i),],
+                                             matrix(NA,ncol=(2000-cohorts[c]),nrow=n.i))
+}
+
+save(simcohorts.year, file=paste0("simcohorts.year_",Sys.Date(),".Rda"))
+
+###########################################################################
+# References --------------------------------------------------------------
+# The code for this microsimulation model was adapted from Appendix A of
 #
 # Krijkamp EM, Alarid-Escudero F, Enns EA, Jalal HJ, Hunink MGM, Pechlivanoglou P. 
 # Microsimulation modeling for health decision sciences using R: A tutorial. 
 # Med Decis Making. 2018;38(3):400-22.
-#
-# Please cite the article when using this code
 # 
 # See GitHub for more information or code updates
 # https://github.com/DARTH-git/Microsimulation-tutorial
-#
-# To program this tutorial we made use of 
-# R: 3.3.0 GUI 1.68 Mavericks build (7202)
-# RStudio: Version 1.0.136 2009-2016 RStudio, Inc.
-
-############################################################################################
-################# Code of Appendix A #######################################################
-############################################################################################
+###########################################################################
