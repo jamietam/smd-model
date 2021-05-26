@@ -18,9 +18,14 @@ This repository contains code to run a simulation model of major depressive epis
 - Citation: Tam J, Mezuk B, Zivin K, Meza R. U.S. Simulation of Lifetime Major Depressive Episode Prevalence and Recall Error. <i>American Journal of Preventive Medicine</i>. 2020. <a href="https://doi.org/10.1016/j.amepre.2020.03.021">https://doi.org/10.1016/j.amepre.2020.03.021</a>
 
 **MD and smoking comorbidity model**
+1. Review and run code in the `model_smkdep_statusquo.R` script.
+2. Calibrate the full model to the NSDUH data in `depsmkprevs_2005-2018_v2.Rda` using the `Bhat` package in R. 
+- The Bhat parameters to be estimated are shown in the `model_females` and `model_males` tab of the `parameters_tx.xls` spreadsheet file. If you do not wish to re-estimate the parameters, change all bhat values in the `model_females` and/or `model_males` tabs to `0`. 
+3. Use the final estimated bhat parameter values to simulate results for male and female populations using the `main` function.
 
-**Smoking prevalence and smoking-attributable mortality**
-
-**Generate figures**
+**Generate tables and figures**
+1. Review and run code in the `compare_statusquo.R` script.
 
 **Sensitivity analysis**
+1. Perform Latin Hypercube Sampling (LHS) uncertainty analysis using the `model_smkdep_LHS.R` script.
+2. Results are saved as R dataframes `females_10perc_optrange.rda` and `males_10perc_optrange.rda`.
