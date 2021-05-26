@@ -33,7 +33,7 @@ maxyear = 2100
 txeffset = c(1.0, 1.137, 1.588, 2.0, 2.50,3.0)
 utilset = c("1.0","1.1","1.2","100")
 
-theme_set( theme_light(base_size = 17))
+theme_set( theme_light(base_size = 14))
 grid_arrange_shared_legend <- function(plots,columns,titletext) {
   g <- ggplotGrob(plots[[1]] + theme(legend.position="bottom"))$grobs
   legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
@@ -157,7 +157,7 @@ getprevsFM <- function(m, t,u){
   return(list(cs_deppopF, cs_deppopM, cs_fdeppopF, cs_fdeppopM))
 }
 
-scenarios = c("Baseline", "Any Tx","Pharm Tx","100% increase","150% increase","200% increase","MPC")
+scenarios = c("Baseline", "Any Tx","Pharm Tx","100% increase","150% increase","200% increase","Maximum Potential Cessation")
 
 for(t in 1:length(txeffset)){ # Baseline and treatment scenarios
     allprevs = getprevsFM(0,txeffset[t],"1.0")
@@ -193,23 +193,26 @@ Figmodelnsduh <- function(whichgender,dfs,smkgroup,popgroup, title){
   nsduh$variable <- as.numeric(levels(nsduh$variable))[nsduh$variable] # converts factor to numeric
   
   fig <- ggplot() +
-    geom_point(data=subset(nsduh, age=="total"), aes(x = variable, y = nsduhvalue*100, shape="NSDUH"))+
-    geom_line(data = subset(model,age=="total"), aes(x=variable, y= modelvalue*100, colour=scenario,group=rev(scenario)))+
-    scale_color_viridis(discrete=TRUE, begin=0, end = 0.75 , option="magma") +
+    geom_point(data=subset(nsduh, age=="total"), aes(x = variable, y = nsduhvalue*100, shape="National Survey on Drug Use and Health"))+
+    geom_line(data = subset(model,age=="total"), aes(x=variable, y= modelvalue*100, colour=scenario,linetype=scenario, group=rev(scenario)))+
+    # scale_color_viridis(discrete=TRUE, begin=0, end = 0.75 , option="magma") +
+    scale_color_grey(start=0, end = 0.75) +
     scale_y_continuous(name="Smoking prevalence (%)",limits=c(0,50),breaks=seq(0,50,5)) +
     scale_x_continuous(name="Year",limits=c(2005,2100),breaks=c(2005,seq(2020,2100, 10)))  +
     labs(title=title)+
-    theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank()) 
+    theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                      panel.background = element_blank())
+    # theme(axis.text.x=element_text(angle=60, hjust=1), legend.title = element_blank())
   return(fig)
 }
 
 dfsF = list(cs_deppopF0,cs_deppopF1,cs_deppopF2,cs_deppopF3,cs_deppopF4,cs_deppopF5, cs_deppopF6)
-Figure3a <- Figmodelnsduh("females",dfsF,"currentsmoker","deppop","A) Women with current MD")
+Figure3a <- Figmodelnsduh("females",dfsF,"currentsmoker","deppop","A) Women with Major Depressive Episodes")
   
 dfsM = list(cs_deppopM0,cs_deppopM1,cs_deppopM2,cs_deppopM3,cs_deppopM4,cs_deppopM5, cs_deppopM6)
-Figure3b <- Figmodelnsduh("males",dfsM,"currentsmoker","deppop", "B) Men with current MD")
+Figure3b <- Figmodelnsduh("males",dfsM,"currentsmoker","deppop", "B) Men with Major Depressive Episodes")
 
-pdf(file = paste0("Fig3_smkprev", namethisrun,".pdf"),width=10, height=6, onefile=FALSE)
+pdf(file = paste0("Fig3_smkprev", namethisrun,"_bw_spelledout.pdf"),width=10, height=6, onefile=FALSE)
 grid_arrange_shared_legend(list(Figure3a, Figure3b),2,"")
 dev.off()
 
