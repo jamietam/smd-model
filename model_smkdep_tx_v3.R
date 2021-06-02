@@ -1,14 +1,16 @@
 rm(list = ls())
-mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model"
+# mainDir <- "C:/Users/jamietam/Dropbox/SGR Chapter 7 Mental Health Substance Use/Data analysis/MDS model"
+mainDir <- "C:/Users/jamietam/Dropbox/GitHub/mds-model"
+
 setwd(file.path(mainDir))
 library(openxlsx)
 library(reshape)
 library(splines)
 library(Bhat)
-load("depsmkprevs_2005-2018_v2.rda") # load NSDUH data with 5 age groups
+load("depsmkprevs_2005-2018_v2.rda") # load NSDUH data with 5 age groups ## UPDATE
 
-namethisrun = "_v3" 
-folder = paste0("manuscript",namethisrun,"/") # name the folder where results will be saved
+namethisrun = "_060221" 
+folder = paste0("SGR",namethisrun,"/") # name the folder where results will be saved
 
 # Read inputs -------------------------------------------------------------
 startyear = 1900 # the burn-in period starting point
@@ -18,7 +20,7 @@ endage = 99
 Ny= endyear - startyear + 1 
 Na= endage - startage + 1
 emptycompartment <- matrix(0, nrow = Na, ncol = Ny, dimnames=list(c(startage:endage),c(startyear:endyear))) # create matrix of zeroes for compartments
-policystart = 2020
+policystart = 2023
 
 allparamsF = read.xlsx("parameters_tx.xlsx",sheet=paste0("model_females"),rowNames=TRUE,colNames=TRUE) # Adjust parameters in this excel file with estimates to be used in the model
 paramsF = as.vector(subset(allparamsF,bhat==1)[['estimate']]) # Parameters where bhat = 1 can be estimated by bhat
@@ -50,7 +52,7 @@ getmodelprevs <- function(numerator,denominator){
 }
 
 # Main model --------------------------------------------------------------
-main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, mpc, txeffcess, util){
+main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, cesseff_dep, cesseff_nevdep, cesseff_fdep){
   setwd(file.path(mainDir))
   
   pop = read.xlsx("census_data/np2017_d1.xlsx",sheet=whichgender,rowNames=TRUE, colNames=TRUE, check.names=FALSE)
@@ -74,7 +76,6 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
   
   smk_init = smk_init_cisnet*smkinit_SF # scale smoking initiation rates ### CHECK DIMENSIONS might be off by one
   smk_cess = smk_cess_cisnet*smkcess_SF # scale smoking cessation rates
-  smk_cess_txpop = smk_cess # when mpc ==0
 
   death_ns = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("ns_",whichgender),rowNames=TRUE, colNames=TRUE, check.names=FALSE) 
   death_cs = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("cs_",whichgender),rowNames=TRUE, colNames=TRUE, check.names=FALSE) 
@@ -155,35 +156,11 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
   ORhdep_quit =  c(rep(ifelse(allparamsF["ORhdep_quit","bhat"]==0,allparamsF["ORhdep_quit","estimate"],paramsF[match("ORhdep_quit",paramsnamesF)]),Na-1))
   Edepr_smkinit =  c(rep(ifelse(allparamsF["Edepr_smkinit","bhat"]==0,allparamsF["Edepr_smkinit","estimate"],paramsF[match("Edepr_smkinit",paramsnamesF)]),Na-1))
   
-  ORhdep_quit_txpop = ORhdep_quit # when mpc = 0
-  
-  # mental health service utilization parameters ----------------------------
-  if ('ahltmde_18to25' %in% paramsnamesF){ # if doing bhat estimation for utilization rates
-    proptx = matrix(NA,99,1)
-    # proptx[1:17] = rep(0,17) # assumes no one is in tx before age 18
-    proptx[1:25] = ifelse(allparamsF["ahltmde_18to25","bhat"]==0,allparamsF["ahltmde_18to25","estimate"],paramsF[match("ahltmde_18to25",paramsnamesF)])
-    proptx[26:34] = ifelse(allparamsF["ahltmde_26to34","bhat"]==0,allparamsF["ahltmde_26to34","estimate"],paramsF[match("ahltmde_26to34",paramsnamesF)])
-    proptx[35:49] = ifelse(allparamsF["ahltmde_35to49","bhat"]==0,allparamsF["ahltmde_35to49","estimate"],paramsF[match("ahltmde_35to49",paramsnamesF)])
-    proptx[50:64] = ifelse(allparamsF["ahltmde_50to64","bhat"]==0,allparamsF["ahltmde_50to64","estimate"],paramsF[match("ahltmde_50to64",paramsnamesF)])
-    proptx[65:99] = ifelse(allparamsF["ahltmde_65plus","bhat"]==0,allparamsF["ahltmde_65plus","estimate"],paramsF[match("ahltmde_65plus",paramsnamesF)])
-  }
-  if (!('ahltmde_18to25'%in% paramsnamesF)){
-    utilrates = read.xlsx("parameters_tx.xlsx",sheet=paste0("util_", whichgender),rowNames=TRUE,colNames=TRUE)
-    colnames(utilrates) <- c("1.0","1.1","1.2","100")
-    proptx = matrix(NA,99,1)
-    # proptx[1:17] = utilrates["ahltmde_18to25",util] #rep(0,17) # assumes same proportion is in tx before age 18
-    proptx[1:25] = utilrates["ahltmde_18to25",util]
-    proptx[26:34] = utilrates["ahltmde_26to34",util]
-    proptx[35:49] = utilrates["ahltmde_35to49",util]
-    proptx[50:64] = utilrates["ahltmde_50to64",util]
-    proptx[65:99] = utilrates["ahltmde_65plus",util]
-  }
-
   # Compartments / state variables ------------------------------------------
   
   # Initialize population - Model compartments are organized with age 0-99 as rows, and year as columns
   matrix.names<-c('ns_nevdep', 'ns_dep1','ns_fdep', 'ns_dep2','ns_recall',
-                  'cs_nevdep', 'cs_dep1_tx','cs_dep1_notx','cs_fdep', 'cs_dep2_tx','cs_dep2_notx','cs_recall',
+                  'cs_nevdep', 'cs_dep1','cs_fdep', 'cs_dep2','cs_recall',
                   'fs_nevdep', 'fs_dep1','fs_fdep', 'fs_dep2','fs_recall','ns_deaths', 'cs_deaths', 'fs_deaths')
   for (name in matrix.names) assign(name,emptycompartment)
 
@@ -194,13 +171,13 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
   for (y in c((startyear+1):(endyear))){
     py = paste(y - 1)
     if (y<policystart){ 
-      txeff = c(rep(1, Na-1))
+      txeffdep = 1
+      txeffnevdep = 1
+      txefffdep = 1
     } else {
-      txeff = c(rep(1,17),rep(txeffcess,Na-1-17)) # Treatment effect applies to those ages 18+,
-    }
-	  if (mpc==1 & y>=policystart){ # when mpc == 1. Under mpc scenario, 100% quitting among treated smkdep pop starting in policy year
-      ORhdep_quit_txpop = 1 # so that all smokers in treatment quit immediately (1-1=0)
-      smk_cess_txpop[19:100,120:201]=1 # Treatment effect applies to those ages 18+, 2019-2100 - need to include 2019 because of 'py'
+      txeffdep = cesseff_dep
+      txeffnevdep = cesseff_nevdep
+      txeffnotdep = cesseff_fdep
     }
 	  if (y>=2016){
       usethis = scaleddep1_inc # from 2016-2100, use scaled incidence probabilities
@@ -210,45 +187,37 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
     
     # Never MDE
     ns_nevdep[2:Na,paste(y)] <- ns_nevdep[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-usethis[(startage+1):(endage),])*(1-death_ns[(startage+1):endage,py])
-    cs_nevdep[2:Na,paste(y)] <- cs_nevdep[1:Na-1,py]*(1-smk_cess[(startage+1):endage,py])*(1-RRcs_dep1*usethis[(startage+1):(endage),])*(1-death_cs[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
-    fs_nevdep[2:Na,paste(y)] <- fs_nevdep[1:Na-1,py]*(1-RRfs_dep1*usethis[(startage+1):(endage),])*(1-death_fs[(startage+1):endage,py]) + cs_nevdep[1:Na-1,py]*(smk_cess[(startage+1):endage,py])
+    cs_nevdep[2:Na,paste(y)] <- cs_nevdep[1:Na-1,py]*(1-txeffnevdep*smk_cess[(startage+1):endage,py])*(1-RRcs_dep1*usethis[(startage+1):(endage),])*(1-death_cs[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
+    fs_nevdep[2:Na,paste(y)] <- fs_nevdep[1:Na-1,py]*(1-RRfs_dep1*usethis[(startage+1):(endage),])*(1-death_fs[(startage+1):endage,py]) + cs_nevdep[1:Na-1,py]*txeffnevdep*(smk_cess[(startage+1):endage,py])
     
     # Current MDE (1st episode)
     
     ns_dep1[2:Na,paste(y)] <- ns_dep1[1:Na-1,py]*(1-Edepr_smkinit*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(usethis[(startage+1):(endage),])
     
-    cs_dep1_tx[2:Na,paste(y)] <-  cs_dep1_tx[1:Na-1,py]*(1-ORhdep_quit_txpop*txeff*smk_cess_txpop[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  proptx*cs_nevdep[1:Na-1,py]*(RRcs_dep1*usethis[(startage+1):(endage),]) + proptx*ns_dep1[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py])
-    cs_dep1_notx[2:Na,paste(y)] <- cs_dep1_notx[1:Na-1,py]*(1-ORhdep_quit*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  (1-proptx)*cs_nevdep[1:Na-1,py]*(RRcs_dep1*usethis[(startage+1):(endage),]) + (1-proptx)*ns_dep1[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py])
+    cs_dep1[2:Na,paste(y)] <-  cs_dep1[1:Na-1,py]*(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  cs_nevdep[1:Na-1,py]*(RRcs_dep1*usethis[(startage+1):(endage),]) + ns_dep1[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py])
     
-    cs_dep1 = cs_dep1_tx +  cs_dep1_notx
-    
-    fs_dep1[2:Na,paste(y)] <- fs_dep1[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_nevdep[1:Na-1,py]*(RRfs_dep1*usethis[(startage+1):(endage),]) + cs_dep1_notx[1:Na-1,py]*(ORhdep_quit*smk_cess[(startage+1):endage,py]) + cs_dep1_tx[1:Na-1,py]*(ORhdep_quit_txpop*txeff*smk_cess_txpop[(startage+1):endage,py])
-    
+    fs_dep1[2:Na,paste(y)] <- fs_dep1[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_nevdep[1:Na-1,py]*(RRfs_dep1*usethis[(startage+1):(endage),]) + cs_dep1[1:Na-1,py]*(ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])
     
     # Current MDE (Recurrent episode)
     ns_dep2[2:Na,paste(y)] <- ns_dep2[1:Na-1,py]*(1-Edepr_smkinit*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(depr_inc[(startage+1):(endage),]) + ns_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
     
-    cs_dep2_tx[2:Na,paste(y)] <- cs_dep2_tx[1:Na-1,py] *(1-ORhdep_quit_txpop*txeff*smk_cess_txpop[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + proptx*cs_fdep[1:Na-1,py]*(Ecs_depr*depr_inc[(startage+1):(endage),]) + proptx*ns_dep2[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py]) + proptx*cs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
-    
-    cs_dep2_notx[2:Na,paste(y)] <- cs_dep2_notx[1:Na-1,py] *(1-ORhdep_quit*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  (1-proptx)*cs_fdep[1:Na-1,py]*(Ecs_depr*depr_inc[(startage+1):(endage),]) + (1-proptx)*ns_dep2[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py]) + (1-proptx)*cs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
-    
-    cs_dep2 = cs_dep2_tx +  cs_dep2_notx
-    
-    fs_dep2[2:Na,paste(y)] <- fs_dep2[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(Efs_depr*depr_inc[(startage+1):(endage),]) + cs_dep2_tx[1:Na-1,py]*(ORhdep_quit_txpop*txeff*smk_cess_txpop[(startage+1):endage,py]) +cs_dep2_notx[1:Na-1,py]*(ORhdep_quit*smk_cess[(startage+1):endage,py])+fs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
+    cs_dep2[2:Na,paste(y)] <- cs_dep2[1:Na-1,py] *(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(Ecs_depr*depr_inc[(startage+1):(endage),]) + ns_dep2[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py]) + cs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
+      
+    fs_dep2[2:Na,paste(y)] <- fs_dep2[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(Efs_depr*depr_inc[(startage+1):(endage),]) + cs_dep2[1:Na-1,py]*(ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py]) + fs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
     
     # Former MDE - Recovery with risk of recurrence  
     ns_fdep[2:Na,paste(y)] <- ns_fdep[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + ns_dep1[1:Na-1,py]*(deprecov_rate) + ns_dep2[1:Na-1,py]*(deprecov_rate)
     
-    cs_fdep[2:Na,paste(y)] <- cs_fdep[1:Na-1,py]*(1-ORhdep_quit*smk_cess[(startage+1):endage,py])*(1-Ecs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)])  + cs_dep1_tx[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep2_tx[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep1_notx[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep2_notx[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + ns_fdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
+    cs_fdep[2:Na,paste(y)] <- cs_fdep[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-Ecs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)])  + cs_dep1[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep2[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + ns_fdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
     
-    fs_fdep[2:Na,paste(y)] <- fs_fdep[1:Na-1,py]*(1-Efs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + fs_dep1[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + fs_dep2[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + cs_fdep[1:Na-1,py]*(ORhdep_quit*smk_cess[(startage+1):endage,py])
+    fs_fdep[2:Na,paste(y)] <- fs_fdep[1:Na-1,py]*(1-Efs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + fs_dep1[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + fs_dep2[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + cs_fdep[1:Na-1,py]*(ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])
     
     # Recall Error 
     ns_recall[2:Na,paste(y)] <- ns_recall[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
   
-  	cs_recall[2:Na,paste(y)] <- cs_recall[1:Na-1,py]*(1-ORhdep_quit*smk_cess[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + ns_recall[1:Na-1,py]*(smk_init[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
+  	cs_recall[2:Na,paste(y)] <- cs_recall[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + ns_recall[1:Na-1,py]*(smk_init[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
     
-    fs_recall[2:Na,paste(y)] <- fs_recall[1:Na-1,py]*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])+ cs_recall[1:Na-1,py]*(ORhdep_quit*smk_cess[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
+    fs_recall[2:Na,paste(y)] <- fs_recall[1:Na-1,py]*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])+ cs_recall[1:Na-1,py]*(ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
     
   }
 
@@ -289,9 +258,6 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
   cs_everdep = cs_recall + cs_dep2 + cs_fdep + cs_dep1
   fs_everdep = fs_recall + fs_dep2 + fs_fdep + fs_dep1
   ns_everdep = ns_recall + ns_dep2 + ns_fdep + ns_dep1
-  
-  cs_dep_tx = cs_dep1_tx + cs_dep2_tx
-  cs_dep_notx = cs_dep1_notx + cs_dep2_notx
     
   # Get prevalences for model fitting ---------------------------------------
   
@@ -326,10 +292,13 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, m
               ns_everdep, cs_everdep, fs_everdep,
               ns_dep, cs_dep, fs_dep,
               ns_fdep, cs_fdep, fs_fdep, 
-              ns_recall, cs_recall, fs_recall,
-              cs_dep_tx, cs_dep_notx
+              ns_recall, cs_recall, fs_recall
               ))
 }
+outF0 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
+outF1 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
+outM0 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
+outM1 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
 
 # Get NSDUH prevs by age group --------------------------------------------
 # Generates the corresponding NSDUH prevalences so that we can compare them to output from the getmodelprevs function
@@ -373,18 +342,6 @@ getsumdiffs = function(out, whichgender){
 }
 
 
-getsumdiffs_util = function(out, whichgender,util){
-  if (whichgender=="females"){
-    ahltmde <-	as.numeric(util)*c(0.4955417, 0.6229463, 0.7067596, 0.7326142, 0.6762736, 0.6576061) 
-  }
-  if (whichgender=="males"){
-    ahltmde <- as.numeric(util)*c(0.3750369,0.4482582, 0.5409039,0.6605244,0.5895799,0.5128584 ) 
-  }
-  modelsmkdata=out[[1]]
-  txdiffs <- abs(subset(as.data.frame(modelsmkdata[13]),select="X2018")[1:6,] - ahltmde) #absolute value of diffs
-  return(sum(txdiffs))
-}
-
 # Bhat estimation ---------------------------------------------------------
 
 xF <- list(label=paramsnamesF, est=paramsF,low=lowervectorF,upp=uppervectorF) # est = parameter starting values
@@ -412,6 +369,5 @@ ML_bhatM=function(paramsM){
 # resbhatM=dfp(xM,ML_bhatM)
 # paramsM=resbhatM$est
 
-mainDir <- "C:/Users/jamietam/Dropbox/GitHub/smk-dep-model/" 
 dir.create(file.path(mainDir, folder), showWarnings = FALSE)
 setwd(file.path(mainDir,folder)) # save all output to this subdirectory
