@@ -65,8 +65,9 @@ getnsduhprevsCI <- function(depsmkprevs_by_year,assignedsex,numpop,denompop){
 
 # Smoking prevalence projections with NSDUH comparison -------------------------------------------------
 
-getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
-  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+getprevsFM <- function(initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep){
+  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF,
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopF = outF[[12]]
   deppopF = outF[[13]]
@@ -80,7 +81,8 @@ getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
   cs_deppopF = getmodelprevs(cs_depF,deppopF)
   cs_fdeppopF = getmodelprevs(cs_depF,fdeppopF)
   
-  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, 
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopM = outM[[12]]
   deppopM = outM[[13]]
