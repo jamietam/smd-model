@@ -52,7 +52,8 @@ getmodelprevs <- function(numerator,denominator){
 }
 
 # Main model --------------------------------------------------------------
-main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, cesseff_dep, cesseff_nevdep, cesseff_fdep){
+main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, 
+		 initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep){
   setwd(file.path(mainDir))
   
   pop = read.xlsx("census_data/np2017_d1.xlsx",sheet=whichgender,rowNames=TRUE, colNames=TRUE, check.names=FALSE)
@@ -171,10 +172,16 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, c
   for (y in c((startyear+1):(endyear))){
     py = paste(y - 1)
     if (y<policystart){ 
+      txeffdep_init = 1
+      txeffnevdep_init = 1
+      txefffdep_init = 1
       txeffdep = 1
       txeffnevdep = 1
       txefffdep = 1
     } else {
+      txeffdep_init = initeff_dep
+      txeffnevdep_init = initeff_nevdep
+      txefffdep_init = initeff_fdep
       txeffdep = cesseff_dep
       txeffnevdep = cesseff_nevdep
       txeffnotdep = cesseff_fdep
@@ -186,36 +193,36 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, c
     }
     
     # Never MDE
-    ns_nevdep[2:Na,paste(y)] <- ns_nevdep[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-usethis[(startage+1):(endage),])*(1-death_ns[(startage+1):endage,py])
-    cs_nevdep[2:Na,paste(y)] <- cs_nevdep[1:Na-1,py]*(1-txeffnevdep*smk_cess[(startage+1):endage,py])*(1-RRcs_dep1*usethis[(startage+1):(endage),])*(1-death_cs[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
+    ns_nevdep[2:Na,paste(y)] <- ns_nevdep[1:Na-1,py]*(1-txeffnevdep_init*smk_init[(startage+1):endage,py])*(1-usethis[(startage+1):(endage),])*(1-death_ns[(startage+1):endage,py])
+    cs_nevdep[2:Na,paste(y)] <- cs_nevdep[1:Na-1,py]*(1-txeffnevdep*smk_cess[(startage+1):endage,py])*(1-RRcs_dep1*usethis[(startage+1):(endage),])*(1-death_cs[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(txeffnevdep_init*smk_init[(startage+1):endage,py])
     fs_nevdep[2:Na,paste(y)] <- fs_nevdep[1:Na-1,py]*(1-RRfs_dep1*usethis[(startage+1):(endage),])*(1-death_fs[(startage+1):endage,py]) + cs_nevdep[1:Na-1,py]*txeffnevdep*(smk_cess[(startage+1):endage,py])
     
     # Current MDE (1st episode)
     
-    ns_dep1[2:Na,paste(y)] <- ns_dep1[1:Na-1,py]*(1-Edepr_smkinit*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(usethis[(startage+1):(endage),])
+    ns_dep1[2:Na,paste(y)] <- ns_dep1[1:Na-1,py]*(1-Edepr_smkinit*txeffdep_init*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_nevdep[1:Na-1,py]*(usethis[(startage+1):(endage),])
     
-    cs_dep1[2:Na,paste(y)] <-  cs_dep1[1:Na-1,py]*(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  cs_nevdep[1:Na-1,py]*(RRcs_dep1*usethis[(startage+1):(endage),]) + ns_dep1[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py])
+    cs_dep1[2:Na,paste(y)] <-  cs_dep1[1:Na-1,py]*(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) +  cs_nevdep[1:Na-1,py]*(RRcs_dep1*usethis[(startage+1):(endage),]) + ns_dep1[1:Na-1,py]*(Edepr_smkinit*txeffdep_init*smk_init[(startage+1):endage,py])
     
     fs_dep1[2:Na,paste(y)] <- fs_dep1[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_nevdep[1:Na-1,py]*(RRfs_dep1*usethis[(startage+1):(endage),]) + cs_dep1[1:Na-1,py]*(ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])
     
     # Current MDE (Recurrent episode)
-    ns_dep2[2:Na,paste(y)] <- ns_dep2[1:Na-1,py]*(1-Edepr_smkinit*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(depr_inc[(startage+1):(endage),]) + ns_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
+    ns_dep2[2:Na,paste(y)] <- ns_dep2[1:Na-1,py]*(1-Edepr_smkinit*txeffdep_init*smk_init[(startage+1):endage,py])*(1-deprecov_rate)*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(depr_inc[(startage+1):(endage),]) + ns_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
     
-    cs_dep2[2:Na,paste(y)] <- cs_dep2[1:Na-1,py] *(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(Ecs_depr*depr_inc[(startage+1):(endage),]) + ns_dep2[1:Na-1,py]*(Edepr_smkinit*smk_init[(startage+1):endage,py]) + cs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
+    cs_dep2[2:Na,paste(y)] <- cs_dep2[1:Na-1,py] *(1-ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py])*(1-deprecovSF_cs*deprecov_rate)*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(Ecs_depr*depr_inc[(startage+1):(endage),]) + ns_dep2[1:Na-1,py]*(Edepr_smkinit*txeffdep_init*smk_init[(startage+1):endage,py]) + cs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
       
     fs_dep2[2:Na,paste(y)] <- fs_dep2[1:Na-1,py]*(1-deprecovSF_fs*deprecov_rate)*(1-RRdepr_death*death_fs[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(Efs_depr*depr_inc[(startage+1):(endage),]) + cs_dep2[1:Na-1,py]*(ORhdep_quit*txeffdep*smk_cess[(startage+1):endage,py]) + fs_recall[1:Na-1,py]*(depr_inc[(startage+1):(endage),])
     
     # Former MDE - Recovery with risk of recurrence  
-    ns_fdep[2:Na,paste(y)] <- ns_fdep[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + ns_dep1[1:Na-1,py]*(deprecov_rate) + ns_dep2[1:Na-1,py]*(deprecov_rate)
+    ns_fdep[2:Na,paste(y)] <- ns_fdep[1:Na-1,py]*(1-txefffdep_init*smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + ns_dep1[1:Na-1,py]*(deprecov_rate) + ns_dep2[1:Na-1,py]*(deprecov_rate)
     
-    cs_fdep[2:Na,paste(y)] <- cs_fdep[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-Ecs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)])  + cs_dep1[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep2[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + ns_fdep[1:Na-1,py]*(smk_init[(startage+1):endage,py])
+    cs_fdep[2:Na,paste(y)] <- cs_fdep[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-Ecs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)])  + cs_dep1[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + cs_dep2[1:Na-1,py]*(deprecovSF_cs*deprecov_rate) + ns_fdep[1:Na-1,py]*(txefffdep_init*smk_init[(startage+1):endage,py])
     
     fs_fdep[2:Na,paste(y)] <- fs_fdep[1:Na-1,py]*(1-Efs_depr*depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])*(1-forget[(startage+1):(endage)]) + fs_dep1[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + fs_dep2[1:Na-1,py]*(deprecovSF_fs*deprecov_rate) + cs_fdep[1:Na-1,py]*(ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])
     
     # Recall Error 
-    ns_recall[2:Na,paste(y)] <- ns_recall[1:Na-1,py]*(1-smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
+    ns_recall[2:Na,paste(y)] <- ns_recall[1:Na-1,py]*(1-txefffdep_init*smk_init[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_ns[(startage+1):endage,py]) + ns_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
   
-  	cs_recall[2:Na,paste(y)] <- cs_recall[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + ns_recall[1:Na-1,py]*(smk_init[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
+  	cs_recall[2:Na,paste(y)] <- cs_recall[1:Na-1,py]*(1-ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py])*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_cs[(startage+1):endage,py]) + ns_recall[1:Na-1,py]*(txefffdep_init*smk_init[(startage+1):endage,py]) + cs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
     
     fs_recall[2:Na,paste(y)] <- fs_recall[1:Na-1,py]*(1-depr_inc[(startage+1):(endage),])*(1-RRdepr_death*death_fs[(startage+1):endage,py])+ cs_recall[1:Na-1,py]*(ORhdep_quit*txefffdep*smk_cess[(startage+1):endage,py]) + fs_fdep[1:Na-1,py]*(forget[(startage+1):(endage)])
     
@@ -295,10 +302,14 @@ main <- function(getmodelprevs, whichgender, allparamsF, paramsF,paramsnamesF, c
               ns_recall, cs_recall, fs_recall
               ))
 }
-outF0 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
-outF1 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
-outM0 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
-outM1 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
+outF0 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, 
+	     initeff_dep = 1.0,initeff_nevdep = 1.0,initeff_fdep = 1.0, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
+outF1 = main(getmodelprevs,"females",allparamsF,paramsF,paramsnamesF, 
+	     initeff_dep = 1.0,initeff_nevdep = 1.0,initeff_fdep = 1.0, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
+outM0 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, 
+	     initeff_dep = 0.8,initeff_nevdep = 0.8,initeff_fdep = 0.8, cesseff_dep = 1.0, cesseff_nevdep=1.0, cesseff_fdep =1.0)
+outM1 = main(getmodelprevs,"males",allparamsM,paramsM,paramsnamesM, 
+	     initeff_dep = 0.8,initeff_nevdep = 0.8,initeff_fdep = 0.8, cesseff_dep = 1.2, cesseff_nevdep=1.2, cesseff_fdep =1.2)
 
 # Get NSDUH prevs by age group --------------------------------------------
 # Generates the corresponding NSDUH prevalences so that we can compare them to output from the getmodelprevs function
