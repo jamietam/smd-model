@@ -31,7 +31,7 @@ LE_fsM = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("LE_fs_males"),rowNames
 xaxisbreaks = c(seq(2020,2100,10)) # specify the ticks on the x-axis of your results plots
 minyear = 2020
 maxyear = 2100
-txeffset = c(1.0, 1.2)
+txeffset = list(c(1.0,1.0), c(0.8,1.2))
 scenarios = c("Baseline", "20% cess increase")
 
 theme_set( theme_light(base_size = 14))
@@ -65,8 +65,9 @@ getnsduhprevsCI <- function(depsmkprevs_by_year,assignedsex,numpop,denompop){
 
 # Smoking prevalence projections with NSDUH comparison -------------------------------------------------
 
-getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
-  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+getprevsFM <- function(initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep){
+  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, 
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopF = outF[[12]]
   deppopF = outF[[13]]
@@ -80,7 +81,8 @@ getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
   cs_deppopF = getmodelprevs(cs_depF,deppopF)
   cs_fdeppopF = getmodelprevs(cs_depF,fdeppopF)
   
-  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, 
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopM = outM[[12]]
   deppopM = outM[[13]]
@@ -98,7 +100,7 @@ getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
 }
 
 for(t in 1:length(txeffset)){ # Baseline and policy scenarios
-  allprevs = getprevsFM(txeffset[t],txeffset[t],txeffset[t])
+  allprevs = getprevsFM(txeffset[[t]][1],txeffset[[t]][1],txeffset[[t]][1],txeffset[[t]][2],txeffset[[t]][2],txeffset[[t]][2])
   assign(paste0("cs_deppop","F",(t-1)), allprevs[[1]])
   assign(paste0("cs_deppop","M",(t-1)), allprevs[[2]])
   assign(paste0("cs_fdeppop","F",(t-1)), allprevs[[3]])
