@@ -9,10 +9,9 @@ library(Hmisc)
 library(scales)
 library(openxlsx)
 library(viridis)
-
-mainDir <- "C:/Users/jamietam/Dropbox/GitHub/mds-model"
+mainDir <- "C:/Users/mauro/Downloads/mds-model"
 setwd(file.path(mainDir))
-load("depsmkprevs_2005-2018_v2.rda")
+load("depsmkprevs_2005-2019.rda")
 
 death_nsF = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("ns_females"),rowNames=TRUE, colNames=TRUE, check.names=FALSE) 
 death_csF = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("cs_females"),rowNames=TRUE, colNames=TRUE, check.names=FALSE) 
@@ -31,10 +30,10 @@ LE_fsM = read.xlsx("cisnet_deathrates.xlsx",sheet=paste0("LE_fs_males"),rowNames
 xaxisbreaks = c(seq(2020,2100,10)) # specify the ticks on the x-axis of your results plots
 minyear = 2020
 maxyear = 2100
-txeffset = c(1.0, 1.2)
-scenarios = c("Baseline", "20% cess increase")
+txeffset = list(c(1.0,1.0), c(0.8,1.2))
+scenarios = c("Baseline", "20% init decr & cess incr")
 
-theme_set( theme_light(base_size = 14))
+theme_set(theme_light(base_size = 14))
 grid_arrange_shared_legend <- function(plots,columns,titletext) {
   g <- ggplotGrob(plots[[1]] + theme(legend.position="bottom"))$grobs
   legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
@@ -65,8 +64,9 @@ getnsduhprevsCI <- function(depsmkprevs_by_year,assignedsex,numpop,denompop){
 
 # Smoking prevalence projections with NSDUH comparison -------------------------------------------------
 
-getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
-  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+getprevsFM <- function(initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep){
+  outF = main(getmodelprevs, "females", allparamsF, paramsF,paramsnamesF, 
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopF = outF[[12]]
   deppopF = outF[[13]]
@@ -80,7 +80,8 @@ getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
   cs_deppopF = getmodelprevs(cs_depF,deppopF)
   cs_fdeppopF = getmodelprevs(cs_depF,fdeppopF)
   
-  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, cesseff_dep, cesseff_nevdep, cesseff_fdep)
+  outM = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM, 
+              initeff_dep,initeff_nevdep,initeff_fdep, cesseff_dep, cesseff_nevdep, cesseff_fdep)
   
   nevdeppopM = outM[[12]]
   deppopM = outM[[13]]
@@ -98,7 +99,7 @@ getprevsFM <- function(cesseff_dep, cesseff_nevdep, cesseff_fdep){
 }
 
 for(t in 1:length(txeffset)){ # Baseline and policy scenarios
-  allprevs = getprevsFM(txeffset[t],txeffset[t],txeffset[t])
+  allprevs = getprevsFM(txeffset[[t]][1],txeffset[[t]][1],txeffset[[t]][1],txeffset[[t]][2],txeffset[[t]][2],txeffset[[t]][2])
   assign(paste0("cs_deppop","F",(t-1)), allprevs[[1]])
   assign(paste0("cs_deppop","M",(t-1)), allprevs[[2]])
   assign(paste0("cs_fdeppop","F",(t-1)), allprevs[[3]])
@@ -154,8 +155,44 @@ Figure3a <- Figmodelnsduh("females",dfsF,"currentsmoker","deppop","nevdeppop", "
 Figure3b <- Figmodelnsduh("males",dfsM,"currentsmoker","deppop","nevdeppop", "B) Men with Current vs. Never MDE")
 
 pdf(file = paste0("Modelsmkprev", namethisrun,".pdf"),width=10, height=6, onefile=FALSE)
+
 grid_arrange_shared_legend(list(Figure3a, Figure3b),2,"")
 dev.off()
+
+library(openxlsx)
+library(xlsx)
+library(rJava)
+
+smk_prevs = createWorkbook()  
+smk_prevs_sheet<-list(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA)
+sheetnames <- c("cs_deppopF0","cs_deppopM0","cs_fdeppopF0","cs_fdeppopM0","cs_nevdeppopF0","cs_nevdeppopM0",
+                "cs_deppopF1","cs_deppopM1","cs_fdeppopF1","cs_fdeppopM1","cs_nevdeppopF1","cs_nevdeppopM1")
+sheets <- list(cs_deppopF0,cs_deppopM0,cs_fdeppopF0,cs_fdeppopM0,cs_nevdeppopF0,cs_nevdeppopM0,
+               cs_deppopF1,cs_deppopM1,cs_fdeppopF1,cs_fdeppopM1,cs_nevdeppopF1,cs_nevdeppopM1)
+
+for (i in 1:12){
+  smk_prevs_sheet[[i]] <- createSheet(smk_prevs,sheetnames[i])
+ }
+
+for (i in 1:12){
+   addDataFrame(sheets[[i]], sheet=smk_prevs_sheet[[i]],startColumn=1,row.names=TRUE) 
+ }
+
+saveWorkbook(smk_prevs, "smk_prevs_sheet.xlsx")
+
+
+
+## test 2010-------------------------------------------
+outM0 = main(getmodelprevs, "males", allparamsM, paramsM,paramsnamesM,1,1,1,1,1,1)
+cs_deppopM0 = getmodelprevs(outM0[[23]],outM0[[13]])
+fs_deppopM0 = getmodelprevs(outM0[[24]],outM0[[13]])
+as.data.frame(cs_deppopM0)["2010"]
+as.data.frame(fs_deppopM0)["2010"]
+
+cs_nondeppopM0 = getmodelprevs(outM0[[17]]+outM0[[26]],outM0[[12]]+outM0[[14]])
+fs_nondeppopM0 = getmodelprevs(outM0[[18]]+outM0[[27]],outM0[[12]]+outM0[[14]])
+as.data.frame(cs_nondeppopM0)["2010"]
+as.data.frame(fs_nondeppopM0)["2010"]
 
 # Tables - scenario outcomes -------------------------------------------
 
