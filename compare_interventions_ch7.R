@@ -31,6 +31,7 @@ xaxisbreaks = c(seq(2020,2100,10)) # specify the ticks on the x-axis of your res
 minyear = 2020
 maxyear = 2100
 txeffset = list(c(1.0,1.0), c(0.8,1.2))
+
 scenarios = c("Baseline", "20% init decr & cess incr")
 
 theme_set(theme_light(base_size = 14))
